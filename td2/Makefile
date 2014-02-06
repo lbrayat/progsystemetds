@@ -1,2 +1,2 @@
 all : 
-	gcc td1.c -lpthread -o td1.out
+	gcc td2.c -lpthread -o td2.out
