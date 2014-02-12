@@ -2,10 +2,13 @@
 #include<stdlib.h>
 #include <pthread.h>
 
-pthread_mutex_t mymutex;
-float * px = NULL;
+pthread_mutex_t mymutex_px;
+pthread_mutex_t mymutex_py;
 
-// Fonction lancee par le thread
+float * px = NULL;
+float * py = NULL;
+
+// Fonction lancee par le thread 1
 static void * affiche_max_fois_valeur_px (void * p_data)
 {
 	int max = (int) p_data;
@@ -14,12 +17,82 @@ static void * affiche_max_fois_valeur_px (void * p_data)
 	int i;
 	for (i = 0; i < max; i++) {
 
-		pthread_mutex_lock(&mymutex);
+		pthread_mutex_lock(&mymutex_px);
 		
 		// Affichage de la valeur pointee par px
-		printf("[thread] %f\n", *px);
+		printf("[thread1] %f\n", *px);
+		pthread_mutex_unlock(&mymutex_px);
 
-		pthread_mutex_unlock(&mymutex);
+		sleep(1);
+	}
+
+	// Preparation du texte a retourner au parent
+	char *resultChild = malloc(20);
+	strcpy(resultChild, "statusFinChild");
+
+	// Retour au parent
+	pthread_exit(resultChild);
+ 
+   	return NULL;
+}
+
+// Fonction lancee par le thread 2 
+static void * affiche_max_fois_valeur_py (void * p_data)
+{
+	int max = (int) p_data;
+
+	// Boucle de traitement
+	int i;
+	for (i = 0; i < max; i++) {
+
+		pthread_mutex_lock(&mymutex_py);
+		
+		// Affichage de la valeur pointee par px
+		printf("[thread2] %f\n", *py);
+
+		pthread_mutex_unlock(&mymutex_py);
+		
+		sleep(1);
+	}
+
+	// Preparation du texte a retourner au parent
+	char *resultChild = malloc(20);
+	strcpy(resultChild, "statusFinChild");
+
+	// Retour au parent
+	pthread_exit(resultChild);
+ 
+   	return NULL;
+}
+
+// Fonction lancee par le thread 3 
+static void * affiche_max_fois_valeur_px_py (void * p_data)
+{
+	int max = (int) p_data;
+
+	// Boucle de traitement
+	int i;
+	for (i = 0; i < max; i++) {
+
+		int allMutexOk = 0;
+		while (allMutexOk == 0) {
+			pthread_mutex_lock(&mymutex_px);
+			 
+			if (pthread_mutex_trylock(&mymutex_py) == 0) {
+				allMutexOk = 1;
+			}
+			else {
+				pthread_mutex_unlock(&mymutex_px);
+			}
+		}
+			
+		// Affichage de la valeur pointee par px
+		printf("[thread3] %f %f\n", *px, *py);
+		
+		pthread_mutex_unlock(&mymutex_px);
+		pthread_mutex_unlock(&mymutex_py);
+		
+		sleep(1);
 	}
 
 	// Preparation du texte a retourner au parent
@@ -44,48 +117,60 @@ int main(int argc, char *argv[])
 
 	int max = atoi(argv[1]);
 
-	// Initialise le mutex
-	pthread_mutex_init(&mymutex, NULL);
+	// Initialise les mutex
+	pthread_mutex_init(&mymutex_px, NULL);
+	pthread_mutex_init(&mymutex_py, NULL);
 
 	// Declaration du reel
 	float x = 1;
+	float y = 2;
 
-	// Affectation de px avec l'adresse de x
+	// Affectations
 	px = &x;
+	py = &y;
 
-        // Lance un thread qui affichera "et mon courroux"
-	pthread_t myThread;
+        // Lance un thread qui manipule px 
+	pthread_t myThread1;
 	int ret = pthread_create (
-            & myThread, NULL,
+            & myThread1, NULL,
             affiche_max_fois_valeur_px, (void *) max
+         );	
+
+        // Lance un thread qui manipule py 
+	pthread_t myThread2;
+	ret = pthread_create (
+            & myThread2, NULL,
+            affiche_max_fois_valeur_py, (void *) max
+         );	
+
+        // Lance un thread qui manipule px et py 
+	pthread_t myThread3;
+	ret = pthread_create (
+            & myThread3, NULL,
+            affiche_max_fois_valeur_px_py, (void *) max
          );	
 
 	// Boucle de 0 à max
 	int i;
 	for (i = 0; i < max; i++) {
 		
-		pthread_mutex_lock(&mymutex);
+		pthread_mutex_lock(&mymutex_px);
 
 		px = NULL;
 		printf("[main] %i\n", i);
 		px = &x;
 
-		pthread_mutex_unlock(&mymutex);
+		pthread_mutex_unlock(&mymutex_px);
 	}
 
 	printf("termine\n");
         
-	// Annulation du thread fils
-	//pthread_cancel(myThread);
+	// Attente de la fin des thread fils
+        pthread_exit(NULL);
 
-	// Attente de la fin du thread fils
-	char* retChildThread;
-        pthread_join(myThread, (void**)&retChildThread);
-
-	printf("child ended : %s\n", retChildThread);
-
-	// Detruit le mutex
-	pthread_mutex_destroy(&mymutex);
+	// Detruit les mutex
+	pthread_mutex_destroy(&mymutex_px);
+	pthread_mutex_destroy(&mymutex_py);
 
 	return(0);
 }
